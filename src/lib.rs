@@ -8,6 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+// TODO
+// docs
+// methods
+// tidy up (RecordVisitor is a crap name, move graphviz stuff to its own mod)
+// tests
+// sysroot
+// pass crate name to output
+
+
 #![feature(rustc_private)]
 
 #[macro_use]

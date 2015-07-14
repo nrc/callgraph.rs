@@ -22,9 +22,12 @@ use syntax::{ast, visit};
 
 pub struct RecordVisitor<'l, 'tcx: 'l> {
     save_cx: SaveContext<'l, 'tcx>,
+
     static_calls: HashMap<NodeId, NodeId>,
     dynamic_calls: HashMap<NodeId, NodeId>,
     functions: HashMap<NodeId, String>,
+    method_decls: HashMap<NodeId, String>,
+
     cur_fn: Option<NodeId>,
 }
 
@@ -32,9 +35,12 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
     pub fn new(tcx: &'l ty::ctxt<'tcx>) -> RecordVisitor<'l, 'tcx> {
         RecordVisitor {
             save_cx: SaveContext::new(tcx),
+
             static_calls: HashMap::new(),
             dynamic_calls: HashMap::new(),
             functions: HashMap::new(),
+            method_decls: HashMap::new(),
+
             cur_fn: None,
         }
     }
@@ -42,6 +48,11 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
     pub fn dump(&self) {
         println!("Found fns:");
         for (k, d) in self.functions.iter() {
+            println!("{}: {}", k, d);
+        }
+
+        println!("\nFound method decls:");
+        for (k, d) in self.method_decls.iter() {
             println!("{}: {}", k, d);
         }
 
@@ -114,6 +125,49 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
         }
 
         visit::walk_item(self, item)
+    }
+
+    fn visit_trait_item(&mut self, ti: &'v ast::TraitItem) {
+        match ti.node {
+            ast::TraitItem_::MethodTraitItem(_, None) => {
+                let fd = self.save_cx.get_method_data(ti.id, ti.ident.name, ti.span);
+                self.method_decls.insert(fd.id, fd.qualname);
+            }
+            ast::TraitItem_::MethodTraitItem(_, Some(_)) => {
+                let fd = self.save_cx.get_method_data(ti.id, ti.ident.name, ti.span);
+                self.method_decls.insert(fd.id, fd.qualname.clone());
+                self.functions.insert(fd.id, fd.qualname);
+                
+                let prev_fn = self.cur_fn;
+                self.cur_fn = Some(fd.id);
+                visit::walk_trait_item(self, ti);
+                self.cur_fn = prev_fn;
+
+                return;
+            }
+            _ => {}
+        }
+
+        visit::walk_trait_item(self, ti)
+    }
+
+    fn visit_impl_item(&mut self, ii: &'v ast::ImplItem) {
+        match ii.node {
+            ast::ImplItem_::MethodImplItem(..) => {
+                let fd = self.save_cx.get_method_data(ii.id, ii.ident.name, ii.span);
+                self.functions.insert(fd.id, fd.qualname);
+
+                let prev_fn = self.cur_fn;
+                self.cur_fn = Some(fd.id);
+                visit::walk_impl_item(self, ii);
+                self.cur_fn = prev_fn;
+
+                return;
+            }
+            _ => {}
+        }
+
+        visit::walk_impl_item(self, ii)
     }
 }
 
