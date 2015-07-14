@@ -14,6 +14,7 @@
 extern crate log;
 
 extern crate getopts;
+extern crate graphviz;
 extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_trans;
@@ -86,6 +87,7 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
             let mut visitor = visitor::RecordVisitor::new(tcx);
             visit::walk_crate(&mut visitor, krate);
             visitor.dump();
+            visitor.dot();
         });
 
         control

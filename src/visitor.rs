@@ -8,15 +8,17 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashMap;
+use graphviz::{self, Labeller, GraphWalk};
 
 use rustc::middle::ty;
-
 use rustc_trans::save::{self, SaveContext};
+
+use std::collections::HashMap;
+use std::fs::File;
+use std::iter::FromIterator;
 
 use syntax::ast::NodeId;
 use syntax::{ast, visit};
-use syntax::codemap::{Span, NO_EXPANSION, DUMMY_SP};
 
 pub struct RecordVisitor<'l, 'tcx: 'l> {
     save_cx: SaveContext<'l, 'tcx>,
@@ -49,6 +51,13 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
             let to = &self.functions[to];
             println!("{} -> {}", from, to);
         }
+    }
+
+    // Make a graphviz dot file
+    pub fn dot(&self) {
+        // TODO use crate name 
+        let mut file = File::create("out.dot").unwrap();
+        graphviz::render(self, &mut file).unwrap();
     }
 }
 
@@ -105,5 +114,39 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
         }
 
         visit::walk_item(self, item)
+    }
+}
+
+pub type Edge = (NodeId, NodeId);
+
+impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
+    fn graph_id(&'a self) -> graphviz::Id<'a> {
+        graphviz::Id::new("Callgraph_for_TODO").unwrap()
+    }
+
+    fn node_id(&'a self, n: &NodeId) -> graphviz::Id<'a> {
+        graphviz::Id::new(format!("n_{}", n)).unwrap()
+    }
+
+    fn node_label(&'a self, n: &NodeId) -> graphviz::LabelText<'a> {
+        graphviz::LabelText::label(&*self.functions[n])
+    }
+}
+
+impl<'a, 'l, 'tcx: 'l> GraphWalk<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
+    fn nodes(&'a self) -> graphviz::Nodes<'a, NodeId> {
+        graphviz::Nodes::from_iter(self.functions.keys().cloned())
+    }
+
+    fn edges(&'a self) -> graphviz::Edges<'a, Edge> {
+        graphviz::Edges::from_iter(self.static_calls.iter().map(|(f, t)| (f.clone(), t.clone())))
+    }
+
+    fn source(&'a self, &(from, _): &Edge) -> NodeId {
+        from
+    }
+
+    fn target(&'a self, &(_, to): &Edge) -> NodeId {
+        to
     }
 }
