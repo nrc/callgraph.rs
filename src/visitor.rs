@@ -24,9 +24,13 @@ pub struct RecordVisitor<'l, 'tcx: 'l> {
     save_cx: SaveContext<'l, 'tcx>,
 
     static_calls: HashSet<(NodeId, NodeId)>,
-    dynamic_calls: HashMap<NodeId, NodeId>,
+    // During the collection phase, the tuples are (caller def, callee decl).
+    // post_process converts these to (caller def, callee def).
+    dynamic_calls: HashSet<(NodeId, NodeId)>,
     functions: HashMap<NodeId, String>,
     method_decls: HashMap<NodeId, String>,
+    // Maps a method decl to its implementing methods.
+    method_impls: HashMap<NodeId, Vec<NodeId>>,
 
     cur_fn: Option<NodeId>,
 }
@@ -37,9 +41,10 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
             save_cx: SaveContext::new(tcx),
 
             static_calls: HashSet::new(),
-            dynamic_calls: HashMap::new(),
+            dynamic_calls: HashSet::new(),
             functions: HashMap::new(),
             method_decls: HashMap::new(),
+            method_impls: HashMap::new(),
 
             cur_fn: None,
         }
@@ -62,6 +67,13 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
             let to = &self.functions[to];
             println!("{} -> {}", from, to);
         }
+
+        println!("\nFound potential calls:");
+        for &(ref from, ref to) in self.dynamic_calls.iter() {
+            let from = &self.functions[from];
+            let to = &self.functions[to];
+            println!("{} -> {}", from, to);
+        }
     }
 
     // Make a graphviz dot file
@@ -69,6 +81,18 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
         // TODO use crate name 
         let mut file = File::create("out.dot").unwrap();
         graphviz::render(self, &mut file).unwrap();
+    }
+
+    pub fn post_process(&mut self) {
+        let mut processed_calls = HashSet::new();
+
+        for &(ref from, ref to) in self.dynamic_calls.iter() {
+            for to in self.method_impls[to].iter() {
+                processed_calls.insert((*from, *to));
+            }
+        }
+
+        self.dynamic_calls = processed_calls;
     }
 
     fn record_method_call(&mut self, mrd: &save::MethodCallData) {
@@ -87,9 +111,17 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
 
         if let Some(decl_id) = mrd.decl_id {
             if decl_id.krate == ast::LOCAL_CRATE {
-                // TODO dynamic calls
+                self.dynamic_calls.insert((self.cur_fn.unwrap(), decl_id.node));
             }
         }
+    }
+
+    fn append_method_impl(&mut self, decl: NodeId, def: NodeId) {
+        if !self.method_impls.contains_key(&decl) {
+            self.method_impls.insert(decl, vec![]);
+        }
+
+        self.method_impls.get_mut(&decl).unwrap().push(def);
     }
 }
 
@@ -100,7 +132,6 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
         }
 
         let data = self.save_cx.get_path_data(id, path);
-        // TODO need to check for method calls too
         if let save::Data::FunctionCallData(ref fcd) = data {
             if fcd.ref_id.krate == ast::LOCAL_CRATE {
                 let to = fcd.ref_id.node;
@@ -173,11 +204,13 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
             ast::TraitItem_::MethodTraitItem(_, None) => {
                 let fd = self.save_cx.get_method_data(ti.id, ti.ident.name, ti.span);
                 self.method_decls.insert(fd.id, fd.qualname);
+                self.method_impls.insert(fd.id, vec![]);
             }
             ast::TraitItem_::MethodTraitItem(_, Some(_)) => {
                 let fd = self.save_cx.get_method_data(ti.id, ti.ident.name, ti.span);
                 self.method_decls.insert(fd.id, fd.qualname.clone());
                 self.functions.insert(fd.id, fd.qualname);
+                self.append_method_impl(fd.id, fd.id);
                 
                 let prev_fn = self.cur_fn;
                 self.cur_fn = Some(fd.id);
@@ -200,6 +233,11 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
         if let ast::ImplItem_::MethodImplItem(..) = ii.node {
             let fd = self.save_cx.get_method_data(ii.id, ii.ident.name, ii.span);
             self.functions.insert(fd.id, fd.qualname);
+            if let Some(decl) = fd.declaration {
+                if decl.krate == ast::LOCAL_CRATE {
+                    self.append_method_impl(decl.node, fd.id);
+                }
+            }
 
             let prev_fn = self.cur_fn;
             self.cur_fn = Some(fd.id);
@@ -213,7 +251,13 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
     }
 }
 
-pub type Edge = (NodeId, NodeId);
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum CallKind {
+    Definite,
+    Potential,
+}
+
+pub type Edge = (NodeId, NodeId, CallKind);
 
 impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
     fn graph_id(&'a self) -> graphviz::Id<'a> {
@@ -227,6 +271,8 @@ impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
     fn node_label(&'a self, n: &NodeId) -> graphviz::LabelText<'a> {
         graphviz::LabelText::label(&*self.functions[n])
     }
+
+    // TODO styles
 }
 
 impl<'a, 'l, 'tcx: 'l> GraphWalk<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
@@ -235,15 +281,20 @@ impl<'a, 'l, 'tcx: 'l> GraphWalk<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
     }
 
     fn edges(&'a self) -> graphviz::Edges<'a, Edge> {
-        graphviz::Edges::from_iter(
-            self.static_calls.iter().map(|&(ref f, ref t)| (f.clone(), t.clone())))
+        let static_iter = self.static_calls.iter().map(|&(ref f, ref t)| (f.clone(),
+                                                                          t.clone(),
+                                                                          CallKind::Definite));
+        let dyn_iter = self.dynamic_calls.iter().map(|&(ref f, ref t)| (f.clone(),
+                                                                        t.clone(),
+                                                                        CallKind::Potential));
+        graphviz::Edges::from_iter(static_iter.chain(dyn_iter))
     }
 
-    fn source(&'a self, &(from, _): &Edge) -> NodeId {
+    fn source(&'a self, &(from, _, _): &Edge) -> NodeId {
         from
     }
 
-    fn target(&'a self, &(_, to): &Edge) -> NodeId {
+    fn target(&'a self, &(_, to, _): &Edge) -> NodeId {
         to
     }
 }

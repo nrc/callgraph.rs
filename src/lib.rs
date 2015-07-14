@@ -9,12 +9,12 @@
 // except according to those terms.
 
 // TODO
-// docs
-// methods
+// methods - hook up to graphviz styles
 // tidy up (RecordVisitor is a crap name, move graphviz stuff to its own mod)
+// docs & comments
 // tests
-// sysroot
 // pass crate name to output
+// sysroot
 
 
 #![feature(rustc_private)]
@@ -95,6 +95,7 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
 
             let mut visitor = visitor::RecordVisitor::new(tcx);
             visit::walk_crate(&mut visitor, krate);
+            visitor.post_process();
             visitor.dump();
             visitor.dot();
         });
