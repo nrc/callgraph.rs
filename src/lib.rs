@@ -11,7 +11,7 @@
 // TODO
 // methods - hook up to graphviz styles
 // tidy up (RecordVisitor is a crap name, move graphviz stuff to its own mod)
-// docs & comments
+// docs in README
 // tests
 // pass crate name to output
 // sysroot
@@ -39,31 +39,22 @@ use syntax::visit;
 
 use std::path::PathBuf;
 
+
+// Where all the work is done.
 mod visitor;
 
-struct CallGraphCalls {
-    input_path: Option<PathBuf>,
-}
 
+
+// Coordinates the compiler, doesn't need any state for callgraphs.
+struct CallGraphCalls;
+
+// A bunch of callbacks from the compiler. We don't do anything, pretty much.
 impl<'a> CompilerCalls<'a> for CallGraphCalls {
     fn early_callback(&mut self,
                       _: &getopts::Matches,
                       _: &diagnostics::registry::Registry)
                       -> Compilation {
         Compilation::Continue
-    }
-
-    fn some_input(&mut self,
-                  input: Input,
-                  input_path: Option<PathBuf>)
-                  -> (Input, Option<PathBuf>) {
-        match input_path {
-            Some(ref ip) => self.input_path = Some(ip.clone()),
-            _ => {
-                panic!("No input path");
-            }
-        }
-        (input, input_path)
     }
 
     fn no_input(&mut self,
@@ -73,7 +64,7 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
                 _: &Option<PathBuf>,
                 _: &diagnostics::registry::Registry)
                 -> Option<(Input, Option<PathBuf>)> {
-        panic!("No input supplied to RustFmt");
+        panic!("No input supplied to Callgraph");
     }
 
     fn late_callback(&mut self,
@@ -87,15 +78,24 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
     }
 
     fn build_controller(&mut self, _: &Session) -> driver::CompileController<'a> {
+        // Mostly, we want to copy what rustc does.
         let mut control = driver::CompileController::basic();
+        // But we can stop after analysis, we don't need to generate code.
         control.after_analysis.stop = Compilation::Stop;
         control.after_analysis.callback = Box::new(move |state| {
+            // Once we stop, then we walk the AST, collecting information
             let krate = state.expanded_crate.unwrap();
             let tcx = state.tcx.unwrap();
 
             let mut visitor = visitor::RecordVisitor::new(tcx);
+
+            // This actually does the walking.
             visit::walk_crate(&mut visitor, krate);
+
+            // When we're done, process the info we collected.
             visitor.post_process();
+
+            // Then produce output.
             visitor.dump();
             visitor.dot();
         });
@@ -107,6 +107,9 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
 // args are the arguments passed on the command line, generally passed through
 // to the compiler.
 pub fn run(args: Vec<String>) {
-    let mut call_ctxt = CallGraphCalls { input_path: None };
+    // Create a data structure to control compilation.
+    let mut call_ctxt = CallGraphCalls;
+
+    // Run the compiler!
     rustc_driver::run_compiler(&args, &mut call_ctxt);
 }
