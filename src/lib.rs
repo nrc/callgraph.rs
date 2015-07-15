@@ -10,7 +10,7 @@
 
 // TODO
 // methods - hook up to graphviz styles
-// tidy up (RecordVisitor is a crap name, move graphviz stuff to its own mod)
+// tidy up (RecordVisitor is a crap name, pull the data up to lib.rs?)
 // docs in README
 // tests
 // pass crate name to output
@@ -23,7 +23,7 @@
 extern crate log;
 
 extern crate getopts;
-extern crate graphviz;
+extern crate graphviz as rustc_graphviz;
 extern crate rustc;
 extern crate rustc_driver;
 extern crate rustc_trans;
@@ -43,6 +43,8 @@ use std::path::PathBuf;
 // Where all the work is done.
 mod visitor;
 
+// Hanlde graphviz output.
+mod graphviz;
 
 
 // Coordinates the compiler, doesn't need any state for callgraphs.

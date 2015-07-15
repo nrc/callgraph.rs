@@ -8,14 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use graphviz::{self, Labeller, GraphWalk};
-
 use rustc::middle::ty;
 use rustc_trans::save::{self, SaveContext};
 
 use std::collections::{HashMap, HashSet};
-use std::fs::File;
-use std::iter::FromIterator;
 
 use syntax::ast::NodeId;
 use syntax::{ast, visit};
@@ -27,12 +23,12 @@ pub struct RecordVisitor<'l, 'tcx: 'l> {
     save_cx: SaveContext<'l, 'tcx>,
 
     // Track statically dispatched function calls.
-    static_calls: HashSet<(NodeId, NodeId)>,
+    pub static_calls: HashSet<(NodeId, NodeId)>,
     // During the collection phase, the tuples are (caller def, callee decl).
     // post_process converts these to (caller def, callee def).
-    dynamic_calls: HashSet<(NodeId, NodeId)>,
+    pub dynamic_calls: HashSet<(NodeId, NodeId)>,
     // Track function definitions.
-    functions: HashMap<NodeId, String>,
+    pub functions: HashMap<NodeId, String>,
     // Track method declarations.
     method_decls: HashMap<NodeId, String>,
     // Maps a method decl to its implementing methods.
@@ -114,14 +110,6 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
             let to = &self.functions[to];
             println!("{} -> {}", from, to);
         }
-    }
-
-    // Make a graphviz dot file.
-    // Must be called after post_process.
-    pub fn dot(&self) {
-        // TODO use crate name 
-        let mut file = File::create("out.dot").unwrap();
-        graphviz::render(self, &mut file).unwrap();
     }
 
     // Processes dynamically dispatched method calls. Converts calls to the decl
@@ -207,7 +195,7 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
 
         // Skip everything except method calls. (We shouldn't have to do this, but
         // calling get_expr_data on an expression it doesn't know about will panic).
-        if let ast::Expr_::ExprMethodCall(..) = ex.node {} else
+        if let ast::Expr_::ExprMethodCall(..) = ex.node {} else {
             return;
         }
 
@@ -286,69 +274,5 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
         }
 
         visit::walk_impl_item(self, ii)
-    }
-}
-
-// Graphviz interaction.
-//
-// We use NodeIds to identify nodes in the graph to Graphviz. We label them by
-// looking up the name for the id in self.functions. Edges are the union of
-// static and dynamic calls. We don't label edges, but potential calls due to
-// dynamic dispatch get dotted edges.
-//
-// Invariants: all edges must be beween nodes which are in self.functions.
-//             post_process must have been called (i.e., no decls left in the graph)
-
-// Whether a call certainly happens (e.g., static dispatch) or only might happen
-// (e.g., all possible receiving methods of dynamic dispatch).
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum CallKind {
-    Definite,
-    Potential,
-}
-
-// An edge in the callgraph, only used with graphviz.
-pub type Edge = (NodeId, NodeId, CallKind);
-
-// Issues ids, labels, and styles for graphviz.
-impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
-    fn graph_id(&'a self) -> graphviz::Id<'a> {
-        graphviz::Id::new("Callgraph_for_TODO").unwrap()
-    }
-
-    fn node_id(&'a self, n: &NodeId) -> graphviz::Id<'a> {
-        graphviz::Id::new(format!("n_{}", n)).unwrap()
-    }
-
-    fn node_label(&'a self, n: &NodeId) -> graphviz::LabelText<'a> {
-        // To find the label, we just lookup the function name.
-        graphviz::LabelText::label(&*self.functions[n])
-    }
-
-    // TODO styles
-}
-
-// Drives the graphviz visualisation.
-impl<'a, 'l, 'tcx: 'l> GraphWalk<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
-    fn nodes(&'a self) -> graphviz::Nodes<'a, NodeId> {
-        graphviz::Nodes::from_iter(self.functions.keys().cloned())
-    }
-
-    fn edges(&'a self) -> graphviz::Edges<'a, Edge> {
-        let static_iter = self.static_calls.iter().map(|&(ref f, ref t)| (f.clone(),
-                                                                          t.clone(),
-                                                                          CallKind::Definite));
-        let dyn_iter = self.dynamic_calls.iter().map(|&(ref f, ref t)| (f.clone(),
-                                                                        t.clone(),
-                                                                        CallKind::Potential));
-        graphviz::Edges::from_iter(static_iter.chain(dyn_iter))
-    }
-
-    fn source(&'a self, &(from, _, _): &Edge) -> NodeId {
-        from
-    }
-
-    fn target(&'a self, &(_, to, _): &Edge) -> NodeId {
-        to
     }
 }
