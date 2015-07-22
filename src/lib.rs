@@ -30,14 +30,10 @@ extern crate rustc_trans;
 extern crate syntax;
 
 use rustc::session::Session;
-use rustc::session::config as rustc_config;
-use rustc::session::config::Input;
 use rustc_driver::{driver, CompilerCalls, Compilation};
 
-use syntax::diagnostics;
 use syntax::visit;
 
-use std::path::PathBuf;
 
 
 // Where all the work is done.
@@ -50,35 +46,9 @@ mod graphviz;
 // Coordinates the compiler, doesn't need any state for callgraphs.
 struct CallGraphCalls;
 
-// A bunch of callbacks from the compiler. We don't do anything, pretty much.
+// A bunch of callbacks from the compiler. We don't do much, mostly accept the
+// default implementations.
 impl<'a> CompilerCalls<'a> for CallGraphCalls {
-    fn early_callback(&mut self,
-                      _: &getopts::Matches,
-                      _: &diagnostics::registry::Registry)
-                      -> Compilation {
-        Compilation::Continue
-    }
-
-    fn no_input(&mut self,
-                _: &getopts::Matches,
-                _: &rustc_config::Options,
-                _: &Option<PathBuf>,
-                _: &Option<PathBuf>,
-                _: &diagnostics::registry::Registry)
-                -> Option<(Input, Option<PathBuf>)> {
-        panic!("No input supplied to Callgraph");
-    }
-
-    fn late_callback(&mut self,
-                     _: &getopts::Matches,
-                     _: &Session,
-                     _: &Input,
-                     _: &Option<PathBuf>,
-                     _: &Option<PathBuf>)
-                     -> Compilation {
-        Compilation::Continue
-    }
-
     fn build_controller(&mut self, _: &Session) -> driver::CompileController<'a> {
         // Mostly, we want to copy what rustc does.
         let mut control = driver::CompileController::basic();
