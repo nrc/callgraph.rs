@@ -10,7 +10,6 @@
 
 // TODO
 // tests
-// pass crate name to output
 // sysroot
 
 
@@ -28,6 +27,7 @@ extern crate syntax;
 
 use rustc::session::Session;
 use rustc_driver::{driver, CompilerCalls, Compilation};
+use rustc_trans::back::link;
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -64,8 +64,12 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
             // This actually does the walking.
             visit::walk_crate(&mut visitor, krate);
 
+            let crate_name = link::find_crate_name(Some(&state.session),
+                                                   &krate.attrs,
+                                                   state.input);
+
             // When we're done, process the info we collected.
-            let data = visitor.post_process();
+            let data = visitor.post_process(crate_name);
 
             // Then produce output.
             data.dump();
@@ -94,6 +98,8 @@ struct FnData {
     // (caller def, callee def) c.f., FnVisitor::dynamic_calls.
     dynamic_calls: HashSet<(NodeId, NodeId)>,    
     functions: HashMap<NodeId, String>,
+
+    crate_name: String
 }
 
 
@@ -101,8 +107,7 @@ impl FnData {
     // Make a graphviz dot file.
     // Must be called after post_process.
     pub fn dot(&self) {
-        // TODO use crate name 
-        let mut file = File::create("out.dot").unwrap();
+        let mut file = File::create(&format!("{}.dot", self.crate_name)).unwrap();
         rustc_graphviz::render(self, &mut file).unwrap();
     }
 

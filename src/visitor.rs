@@ -87,7 +87,7 @@ impl<'l, 'tcx: 'l> FnVisitor<'l, 'tcx> {
 
     // Processes dynamically dispatched method calls. Converts calls to the decl
     // to a call to every method implementing the decl.
-    pub fn post_process(self) -> FnData {
+    pub fn post_process(self, crate_name: String) -> FnData {
         let mut processed_calls = HashSet::new();
 
         for &(ref from, ref to) in self.dynamic_calls.iter() {
@@ -100,6 +100,7 @@ impl<'l, 'tcx: 'l> FnVisitor<'l, 'tcx> {
             static_calls: self.static_calls,
             dynamic_calls: processed_calls,
             functions: self.functions,
+            crate_name: crate_name,
         }
     }
 

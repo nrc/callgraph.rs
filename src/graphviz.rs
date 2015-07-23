@@ -42,7 +42,7 @@ pub type Edge = (NodeId, NodeId, CallKind);
 // Issues ids, labels, and styles for graphviz.
 impl<'a> Labeller<'a, NodeId, Edge> for FnData {
     fn graph_id(&'a self) -> graphviz::Id<'a> {
-        graphviz::Id::new("Callgraph_for_TODO").unwrap()
+        graphviz::Id::new(&format!("Callgraph_for_{}", self.crate_name)).unwrap()
     }
 
     fn node_id(&'a self, n: &NodeId) -> graphviz::Id<'a> {

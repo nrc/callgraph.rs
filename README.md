@@ -14,7 +14,7 @@ specify your sysroot.
 
 This will generate a dot file which is graphviz output, you can then convert
 that it an image or pdf or whatever. For example, to create a png image called
-out.png, use `dot -oout.png -Tpng <out.dot`.
+out.png, use `dot -oout.png -Tpng <foo.dot`.
 
 
 ## Architecture
