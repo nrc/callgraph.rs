@@ -8,25 +8,15 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use FnData;
+
 use rustc_graphviz as graphviz;
 use rustc_graphviz::{Labeller, GraphWalk, Style};
 
-use std::fs::File;
 use std::iter::FromIterator;
 
 use syntax::ast::NodeId;
 
-use visitor::RecordVisitor;
-
-impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
-    // Make a graphviz dot file.
-    // Must be called after post_process.
-    pub fn dot(&self) {
-        // TODO use crate name 
-        let mut file = File::create("out.dot").unwrap();
-        graphviz::render(self, &mut file).unwrap();
-    }
-}
 
 // Graphviz interaction.
 //
@@ -50,7 +40,7 @@ pub enum CallKind {
 pub type Edge = (NodeId, NodeId, CallKind);
 
 // Issues ids, labels, and styles for graphviz.
-impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
+impl<'a> Labeller<'a, NodeId, Edge> for FnData {
     fn graph_id(&'a self) -> graphviz::Id<'a> {
         graphviz::Id::new("Callgraph_for_TODO").unwrap()
     }
@@ -73,7 +63,7 @@ impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
 }
 
 // Drives the graphviz visualisation.
-impl<'a, 'l, 'tcx: 'l> GraphWalk<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
+impl<'a> GraphWalk<'a, NodeId, Edge> for FnData {
     fn nodes(&'a self) -> graphviz::Nodes<'a, NodeId> {
         graphviz::Nodes::from_iter(self.functions.keys().cloned())
     }

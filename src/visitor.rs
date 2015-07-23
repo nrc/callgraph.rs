@@ -16,19 +16,20 @@ use std::collections::{HashMap, HashSet};
 use syntax::ast::NodeId;
 use syntax::{ast, visit};
 
+use FnData;
 
-// Records functions and function calls, processes and outputs this data.
-pub struct RecordVisitor<'l, 'tcx: 'l> {
+
+// Records functions and function calls.
+pub struct FnVisitor<'l, 'tcx: 'l> {
     // Used by the save-analysis API.
     save_cx: SaveContext<'l, 'tcx>,
 
     // Track statically dispatched function calls.
-    pub static_calls: HashSet<(NodeId, NodeId)>,
-    // During the collection phase, the tuples are (caller def, callee decl).
-    // post_process converts these to (caller def, callee def).
-    pub dynamic_calls: HashSet<(NodeId, NodeId)>,
+    static_calls: HashSet<(NodeId, NodeId)>,
+    // (caller def, callee decl).
+    dynamic_calls: HashSet<(NodeId, NodeId)>,
     // Track function definitions.
-    pub functions: HashMap<NodeId, String>,
+    functions: HashMap<NodeId, String>,
     // Track method declarations.
     method_decls: HashMap<NodeId, String>,
     // Maps a method decl to its implementing methods.
@@ -69,9 +70,9 @@ fn is_local(id: ast::DefId) -> bool {
 }
 
 
-impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
-    pub fn new(tcx: &'l ty::ctxt<'tcx>) -> RecordVisitor<'l, 'tcx> {
-        RecordVisitor {
+impl<'l, 'tcx: 'l> FnVisitor<'l, 'tcx> {
+    pub fn new(tcx: &'l ty::ctxt<'tcx>) -> FnVisitor<'l, 'tcx> {
+        FnVisitor {
             save_cx: SaveContext::new(tcx),
 
             static_calls: HashSet::new(),
@@ -84,37 +85,9 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
         }
     }
 
-    // Dump collected and processed information to stdout.
-    // Must be called after post_process.
-    pub fn dump(&self) {
-        println!("Found fns:");
-        for (k, d) in self.functions.iter() {
-            println!("{}: {}", k, d);
-        }
-
-        println!("\nFound method decls:");
-        for (k, d) in self.method_decls.iter() {
-            println!("{}: {}", k, d);
-        }
-
-        println!("\nFound calls:");
-        for &(ref from, ref to) in self.static_calls.iter() {
-            let from = &self.functions[from];
-            let to = &self.functions[to];
-            println!("{} -> {}", from, to);
-        }
-
-        println!("\nFound potential calls:");
-        for &(ref from, ref to) in self.dynamic_calls.iter() {
-            let from = &self.functions[from];
-            let to = &self.functions[to];
-            println!("{} -> {}", from, to);
-        }
-    }
-
     // Processes dynamically dispatched method calls. Converts calls to the decl
     // to a call to every method implementing the decl.
-    pub fn post_process(&mut self) {
+    pub fn post_process(self) -> FnData {
         let mut processed_calls = HashSet::new();
 
         for &(ref from, ref to) in self.dynamic_calls.iter() {
@@ -123,7 +96,11 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
             }
         }
 
-        self.dynamic_calls = processed_calls;
+        FnData {
+            static_calls: self.static_calls,
+            dynamic_calls: processed_calls,
+            functions: self.functions,
+        }
     }
 
     // Helper function. Record a method call.
@@ -166,7 +143,7 @@ impl<'l, 'tcx: 'l> RecordVisitor<'l, 'tcx> {
 // call expressions, but rather path expressions which refer to functions. This
 // will give us some false positives (e.g., if a function has `let x = foo;`,
 // but `x` is never used).
-impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for RecordVisitor<'l, 'tcx> {
+impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for FnVisitor<'l, 'tcx> {
     // Visit a path - the path could point to a function or method.
     fn visit_path(&mut self, path: &'v ast::Path, id: NodeId) {
         skip_generated_code!(path.span);

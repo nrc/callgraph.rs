@@ -9,8 +9,6 @@
 // except according to those terms.
 
 // TODO
-// tidy up (RecordVisitor is a crap name, pull the data up to lib.rs?)
-//   split RecordVisitor?
 // tests
 // pass crate name to output
 // sysroot
@@ -31,14 +29,17 @@ extern crate syntax;
 use rustc::session::Session;
 use rustc_driver::{driver, CompilerCalls, Compilation};
 
-use syntax::visit;
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
 
+use syntax::ast::NodeId;
+use syntax::visit;
 
 
 // Where all the work is done.
 mod visitor;
 
-// Hanlde graphviz output.
+// Handle graphviz output.
 mod graphviz;
 
 
@@ -58,17 +59,17 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
             let krate = state.expanded_crate.unwrap();
             let tcx = state.tcx.unwrap();
 
-            let mut visitor = visitor::RecordVisitor::new(tcx);
+            let mut visitor = visitor::FnVisitor::new(tcx);
 
             // This actually does the walking.
             visit::walk_crate(&mut visitor, krate);
 
             // When we're done, process the info we collected.
-            visitor.post_process();
+            let data = visitor.post_process();
 
             // Then produce output.
-            visitor.dump();
-            visitor.dot();
+            data.dump();
+            data.dot();
         });
 
         control
@@ -83,4 +84,48 @@ pub fn run(args: Vec<String>) {
 
     // Run the compiler!
     rustc_driver::run_compiler(&args, &mut call_ctxt);
+}
+
+
+// Processed data about our crate. See comments on visitor::FnVisitor for more
+// detail.
+struct FnData {
+    static_calls: HashSet<(NodeId, NodeId)>,
+    // (caller def, callee def) c.f., FnVisitor::dynamic_calls.
+    dynamic_calls: HashSet<(NodeId, NodeId)>,    
+    functions: HashMap<NodeId, String>,
+}
+
+
+impl FnData {
+    // Make a graphviz dot file.
+    // Must be called after post_process.
+    pub fn dot(&self) {
+        // TODO use crate name 
+        let mut file = File::create("out.dot").unwrap();
+        rustc_graphviz::render(self, &mut file).unwrap();
+    }
+
+    // Dump collected and processed information to stdout.
+    pub fn dump(&self) {
+        println!("Found fns:");
+        for (k, d) in self.functions.iter() {
+            println!("{}: {}", k, d);
+        }
+
+        println!("\nFound calls:");
+        for &(ref from, ref to) in self.static_calls.iter() {
+            let from = &self.functions[from];
+            let to = &self.functions[to];
+            println!("{} -> {}", from, to);
+        }
+
+        println!("\nFound potential calls:");
+        for &(ref from, ref to) in self.dynamic_calls.iter() {
+            let from = &self.functions[from];
+            let to = &self.functions[to];
+            println!("{} -> {}", from, to);
+        }
+    }
+
 }
