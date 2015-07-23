@@ -11,7 +11,6 @@
 // TODO
 // tidy up (RecordVisitor is a crap name, pull the data up to lib.rs?)
 //   split RecordVisitor?
-// docs in README
 // tests
 // pass crate name to output
 // sysroot
