@@ -9,8 +9,8 @@
 // except according to those terms.
 
 // TODO
-// methods - hook up to graphviz styles
 // tidy up (RecordVisitor is a crap name, pull the data up to lib.rs?)
+//   split RecordVisitor?
 // docs in README
 // tests
 // pass crate name to output

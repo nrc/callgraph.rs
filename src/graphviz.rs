@@ -9,7 +9,7 @@
 // except according to those terms.
 
 use rustc_graphviz as graphviz;
-use rustc_graphviz::{Labeller, GraphWalk};
+use rustc_graphviz::{Labeller, GraphWalk, Style};
 
 use std::fs::File;
 use std::iter::FromIterator;
@@ -64,7 +64,12 @@ impl<'a, 'l, 'tcx: 'l> Labeller<'a, NodeId, Edge> for RecordVisitor<'l, 'tcx> {
         graphviz::LabelText::label(&*self.functions[n])
     }
 
-    // TODO styles
+    fn edge_style(&'a self, e: &Edge) -> Style {
+        match e.2 {
+            CallKind::Definite => Style::None,
+            CallKind::Potential => Style::Dotted,
+        }
+    }
 }
 
 // Drives the graphviz visualisation.
