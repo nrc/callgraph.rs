@@ -150,14 +150,14 @@ impl<'v, 'l, 'tcx: 'l> visit::Visitor<'v> for FnVisitor<'l, 'tcx> {
         skip_generated_code!(path.span);
 
         let data = self.save_cx.get_path_data(id, path);
-        if let save::Data::FunctionCallData(ref fcd) = data {
+        if let Some(save::Data::FunctionCallData(ref fcd)) = data {
             if is_local(fcd.ref_id) {
                 let to = fcd.ref_id.node;
                 ensure_cur_fn!(self, fcd.span);
                 self.static_calls.insert((self.cur_fn.unwrap(), to));
             }
         }
-        if let save::Data::MethodCallData(ref mrd) = data {
+        if let Some(save::Data::MethodCallData(ref mrd)) = data {
             self.record_method_call(mrd);
         }
 
