@@ -42,6 +42,7 @@ mod visitor;
 // Handle graphviz output.
 mod graphviz;
 
+const SKIP_UNCONNECTED_FNS: bool = true;
 
 // Coordinates the compiler, doesn't need any state for callgraphs.
 struct CallGraphCalls;

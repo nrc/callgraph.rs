@@ -89,19 +89,47 @@ impl<'l, 'tcx: 'l> FnVisitor<'l, 'tcx> {
     // to a call to every method implementing the decl.
     pub fn post_process(self, crate_name: String) -> FnData {
         let mut processed_calls = HashSet::new();
+        let mut processed_fns = HashMap::with_capacity(self.functions.len());
 
         for &(ref from, ref to) in self.dynamic_calls.iter() {
             for to in self.method_impls[to].iter() {
                 processed_calls.insert((*from, *to));
+                self.append_fn(&mut processed_fns, *from);
+                self.append_fn(&mut processed_fns, *to);
+            }
+        }
+
+        if ::SKIP_UNCONNECTED_FNS {
+            for &(ref from, ref to) in self.static_calls.iter() {
+                self.append_fn(&mut processed_fns, *from);
+                self.append_fn(&mut processed_fns, *to);
             }
         }
 
         FnData {
             static_calls: self.static_calls,
             dynamic_calls: processed_calls,
-            functions: self.functions,
+            functions: if ::SKIP_UNCONNECTED_FNS {
+                    processed_fns
+                } else {
+                    self.functions
+                },
             crate_name: crate_name,
         }
+    }
+
+    // If we are skipping unconnected functions, then keep track of which
+    // functions are connected.
+    fn append_fn(&self, map: &mut HashMap<NodeId, String>, id: NodeId) {
+        if !::SKIP_UNCONNECTED_FNS {
+            return;
+        }
+
+        if map.contains_key(&id) {
+            return;
+        }
+
+        map.insert(id, self.functions[&id].clone());
     }
 
     // Helper function. Record a method call.
