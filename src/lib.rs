@@ -57,16 +57,16 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
         control.after_analysis.stop = Compilation::Stop;
         control.after_analysis.callback = Box::new(move |state| {
             // Once we stop, then we walk the AST, collecting information
-            let krate = state.expanded_crate.unwrap();
+            let ast = state.expanded_crate.unwrap();
             let tcx = state.tcx.unwrap();
 
             let mut visitor = visitor::FnVisitor::new(tcx);
 
             // This actually does the walking.
-            visit::walk_crate(&mut visitor, krate);
+            visit::walk_crate(&mut visitor, ast);
 
             let crate_name = link::find_crate_name(Some(&state.session),
-                                                   &krate.attrs,
+                                                   &ast.attrs,
                                                    state.input);
 
             // When we're done, process the info we collected.
@@ -85,10 +85,10 @@ impl<'a> CompilerCalls<'a> for CallGraphCalls {
 // to the compiler.
 pub fn run(args: Vec<String>) {
     // Create a data structure to control compilation.
-    let mut call_ctxt = CallGraphCalls;
+    let mut calls = CallGraphCalls;
 
     // Run the compiler!
-    rustc_driver::run_compiler(&args, &mut call_ctxt);
+    rustc_driver::run_compiler(&args, &mut calls);
 }
 
 
