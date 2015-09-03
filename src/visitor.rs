@@ -9,6 +9,7 @@
 // except according to those terms.
 
 use rustc::middle::ty;
+use rustc::middle::def_id::{DefId, LOCAL_CRATE};
 use rustc_trans::save::{self, SaveContext};
 
 use std::collections::{HashMap, HashSet};
@@ -65,8 +66,8 @@ macro_rules! skip_generated_code {($span: expr) => {
 }}
 
 // True if the def_id refers to an item in the current crate.
-fn is_local(id: ast::DefId) -> bool {
-    id.krate == ast::LOCAL_CRATE
+fn is_local(id: DefId) -> bool {
+    id.krate == LOCAL_CRATE
 }
 
 
